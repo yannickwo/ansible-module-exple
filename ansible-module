@@ -1,0 +1,473 @@
+#Create a playbook httpd.yml under ~/playbooks/ to install httpd package on web1 node using Ansible’s yum module.
+
+---
+- name: installing httpd
+  hosts: web1
+  tasks:
+    - yum:
+       name: httpd
+       state: installed
+
+#We have an rpm available for wget package on URL http://mirror.centos.org/centos/7/os/x86_64/Packages/wget-1.14-18.el7_6.1.#x86_64.rpm. Create a playbook with name wget.yml under ~/playbooks to install that rpm on web1 node using yum module.
+
+---
+- name: wget installation
+  hosts: web1
+  tasks:
+    - yum:
+        name: http://mirror.centos.org/centos/7/os/x86_64/Packages/wget-1.14-18.el7_6.1.x86_64.rpm
+        state: present
+
+
+---
+- hosts: all
+  tasks:
+    - name: Install unzip package
+      yum:
+        name: unzip-5.52
+        state: present
+
+
+
+
+---
+- hosts: web1
+  tasks:
+  - yum: name=sudo state=latest
+  - yum: name=vsftpd-2.2.2 state=present allow_downgrade=yes
+
+Create a playbook httpd.yml under ~/playbooks directory to make sure httpd service is started on web1 node. You can use ~/playbooks/inventory
+
+---
+- name: service
+  hosts: web1
+  tasks:
+    - service:
+       name: httpd
+       state: started
+
+---
+- hosts: all
+  gather_facts: no
+  tasks:
+    - name: Copy Apache welcome file
+      copy:
+        src: index.html
+        dest: /var/www/html/index.html
+    - service:
+        name: httpd
+        state: reloaded
+
+
+
+
+We would like the httpd service on web1 node to always start automatically after the system reboots. Update the httpd.yml playbook you created earlier with the required changes
+
+---
+- name: Start httpd
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Start httpd service
+      service:
+        name: httpd
+        state: started
+        enabled: true
+
+We created a playbook ~/playbooks/config.yml to enable port 443 for httpd on web1 node as we want to run nginx on the default port 80 so port 80 needs to be free. Make changes in the playbook so that httpd service restarts after making these change.
+
+
+---
+- hosts: all
+  gather_facts: no
+  tasks:
+    - name: Make changes in Apache config
+      replace:
+        path: /etc/httpd/conf/httpd.conf
+        regexp: "^Listen 80"
+        replace: "Listen 443"
+
+    - name: Restart Apache
+      service:
+        name: httpd
+        state: restarted
+
+
+
+The playbook currently runs an echo command to print a fruit name. Apply a loop directive (with_items) to the task to print all fruits defined in the fruits variable.
+
+
+    name: 'Print list of fruits'
+    hosts: localhost
+    vars:
+        fruits:
+            - Apple
+            - Banana
+            - Grapes
+            - Orange
+    tasks:
+        -
+            command: 'echo "{{ item }}"'
+            with_items: '{{ fruits}}'
+
+
+
+
+
+
+-
+    name: 'Install required packages'
+    hosts: localhost
+    vars:
+        packages:
+            - httpd
+            - binutils
+            - glibc
+            - ksh
+            - libaio
+            - libXext
+            - gcc
+            - make
+            - sysstat
+            - unixODBC
+            - mongodb
+            - nodejs
+            - grunt
+    tasks:
+        -
+            yum: 
+                name: item 
+                state: present
+            with_items: '{{ packages }}'
+
+Under ~/playbooks/ directory create a playbook web1.yml to create a blank file named as /root/myfile.txt under root’s home on web1 node, also make sure this must run for web1 node only.
+
+---
+- name: create a blank file
+  hosts: web1
+  tasks:
+    - name: creating a file
+      file:
+        path: /root/myfile.txt
+        state: touch 
+
+---
+- hosts: web2
+  tasks:
+  - name: echo Welcome!
+    shell: 'echo "Welcome!" > /tmp/welcome.txt'
+
+creating a user
+
+---
+- hosts: web1
+  tasks: 
+    - name: to create a user 
+      user:
+        name: angel
+
+
+---
+- name: os dictributtion
+  hosts: localhost
+  gather_facts: True
+  tasks:
+    - debug:
+        var: distribution_version
+
+ to check the OS release version using ansible
+ansible -m setup localhost | grep distribution_version
+
+
+web1 ansible_host=172.20.1.100 ansible_ssh_pass=Passw0rd ansible_user=root     ----- inventory file
+ansible -i inventory -m setup web1 | grep distribution    targeting inventory file     
+
+
+
+Retreive all the facts of the web1 server and store them in a file at /home/thor/playbooks/web/web-facts.txt
+Inventory file is at /home/thor/playbooks/web 
+
+ansible -m setup web1 -i inventory > /home/thor/playbooks/web/web-facts.txt
+
+------
+Using an Ansible playbook install firewalld on web1 node, start and enable its service as well. Name the playbook as firewall.yml and keep it under ~/playbooks.
+
+soluton:
+---
+- name: install firewalld
+  hosts: web1
+  tasks:
+    - yum:
+        name: firewalld
+        state: installed
+    - service:
+        name: firewalld
+        state: started
+
+
+-----
+We have a requirement on web1 node to white list web2 node's IP address 172.20.1.101 in firewall. Create and run a playbook ~/playbooks/whitelist.yml to do so.
+Add IP in internal zone.
+
+solution:
+
+---
+- hosts: web1
+  tasks:
+   - firewalld:
+      source: 172.20.1.101
+      state: enabled
+      zone: internal
+      permanent: yes
+      immediate: yes
+
+-----------------
+We want to block 161/udp port on web1 node permanently. 
+Make a playbook block.yml under ~/playbooks/ directory to do so.
+Use zone: block
+
+solution
+
+---
+- hosts: web1
+  tasks:
+   - firewalld:
+      port: 161/udp
+      zone: block
+      permanent: yes
+      immediate: yes
+      state: enabled
+----------------------------------
+
+
+On web1 node add firewall rule in internal zone to enable https connection from Ansible controller machine and make sure that rule must persist even after system reboot. You can create a playbook https.yml under ~/playbooks/ directory.
+IP address of ansible controller is 172.20.1.2.
+solution:
+
+---
+- hosts: web1
+  tasks:
+   - firewalld:
+      service: https
+      source: 172.20.1.2
+      state: enabled
+      zone: internal
+      permanent: yes
+      immediate: yes
+
+----------------------------------
+
+We have a playbook ~/playbooks/web2-config.yml, it has some existing code to change apache’s default port 80 to port 8082 as we want to run Apache on port 8082 on web2 node. Make some changes as given below before running the playbook.
+
+
+
+A. Add an entry in ~/playbooks/inventory for web2 node, IP address of web2 node is 172.20.1.101 and ssh password and username are same as of web1 (username = root and password = Passw0rd).
+
+B. Update web2-config.yml to install httpd before updating its port in config, also start/enable its service.
+
+C. Install firewalld package and start/enable its service.
+
+D. As now Apache will listen on port 8082 so edit the playbook to add firewall rule in public zone so that Apache can allow all incoming traffic.
+
+web2-config.yml
+---
+- hosts: web2
+  tasks:
+    - name: Change Apache port
+      replace:
+        path: /etc/httpd/conf/httpd.conf
+        regexp: "Listen 80"
+        replace: "Listen 8082"
+
+    - name: Restart Apache service
+      service:
+        name: httpd
+        state: restarted
+inventory
+web1 ansible_host=172.20.1.100 ansible_ssh_pass=Passw0rd ansible_user=root
+
+
+
+solution
+
+A. inventory
+web1 ansible_host=172.20.1.100 ansible_ssh_pass=Passw0rd ansible_user=root
+web2 ansible_host=172.20.1.101 ansible_ssh_pass=Passw0rd ansible_user=root
+
+B. web2-config.yml
+
+---
+- hosts: web2
+  tasks:
+    - name: Install pkgs
+      yum:
+        name: httpd, firewalld
+        state: present
+
+    - name: Start/Enable services
+      service:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      with_items:
+        - httpd
+        - firewalld
+
+    - name: Change Apache port
+      replace:
+        path: /etc/httpd/conf/httpd.conf
+        regexp: "Listen 80"
+        replace: "Listen 8082"
+
+    - name: restart Apache
+      service:
+        name: httpd
+        state: restarted
+
+    - name: Add firewall rule for Apache
+      firewalld:
+        port: 8082/tcp
+        zone: public
+        permanent: yes
+        state: enabled
+        immediate: true
+
+
+To verify firewall rules, SSH to web2 server and run the following commands:-
+
+ssh root@web2
+
+firewall-cmd --list-ports --zone=public 
+
+
+----------------------
+We have now set up a new physical volume called /dev/vdb1 that is managed by LVM. Inspect it by running the command pvs on the target nodes specified in inventory file ~/playbooks/inventory
+
+
+example: ssh 172.20.1.100 -l root pvs. When prompted enter password: Passw0rd
+
+
+--------------------------------
+Under ~/playbooks/ directory create a playbook create_vg.yml to create a new VG called vg_sql. The playbook should only run on node node00. Use the PV /dev/vdb1 for the VG
+
+---
+- name: 
+  hosts: node00
+  tasks:
+   - lvg:
+      vg: vg_sql
+      pvs: /dev/vdb1
+      
+      
+      
+---------------
+Under ~/playbooks/ directory create a playbook create_lvol.yml to create a new logical volume called lv_data. The playbook should only run on node node00. Use the VG vg_sql for the VG. Size of the LVM should be 500MB
+
+solution:
+---
+- name: 
+  hosts: node00
+  tasks:
+   - lvol:
+      vg: vg_sql
+      lv: lv_data
+      size: 500MB
+
+
+Create a playbook called create_fs.yml. The playbook should create a new filesystem on the logical volume lv_data on node00. Create this playbook under ~/playbooks directory.
+
+
+fstype = ext4 dev: /dev/vg_sql/lv_data
+
+solution
+
+
+---
+- hosts: node00
+  tasks:
+  - name: create filesystem
+    filesystem:
+      fstype: ext4
+      dev: /dev/vg_sql/lv_data
+----------------------------------
+Create a playbook called create_mount.yml. The playbook should only run on node00 and mount the newly created filesystem /dev/vg_sql/lv_data on the directory /mnt/data. Create this playbook under ~/playbooks directory.
+
+
+src = /dev/vg_sql/lv_data name = /mnt/data fstype = ext4 state = mounted
+
+solution:
+---
+- hosts: node00
+  tasks:
+  - name: mount fs
+    mount:
+      name: /mnt/data
+      src: /dev/vg_sql/lv_data
+      fstype: ext4
+      state: mounted
+~                      
+
+
+-------------
+
+Write a playbook create_user.yml to create a user named admin with group: admin and uid: 2048
+
+NOTE: Your playbook must be placed inside folder: /home/thor/playbooks/. Run this playbook for all servers which are listed in /home/thor/playbooks/inventory file.
+
+solution:
+
+---
+- hosts: all
+  gather_facts: no
+  tasks:
+    - group:
+        name: 'admin'
+        state: present
+    - user:
+        name: 'admin'
+        uid: 2048
+        group: 'admin'
+
+
+----------------------------------
+Suppose Sabin Nepal joined your team on the first day of 2020 as a special contractor to work for a span of 3 years, ie, till the end of the year 2023. He needs his accounts on the remote hosts till his work span.
+
+
+
+Write a playbook add_user.yml to create his user account with username neymarsabin that would be expiring after 3 years. The expires option on the users module is in the epoch. So Sunday, December 31, 2023 11:59:59 PM GMT== 1704067199 as epoch time
+
+Remember: your playbook must be placed inside /home/thor/playbooks and use inventory file there.
+
+
+solution:
+
+---
+- hosts: all
+  gather_facts: no
+  tasks:
+    - user:
+        name: 'neymarsabin'
+        expires: 1704067199
+
+----------------------------------
+
+The admin user you created earlier got compromised for some reason, and you need to remove it asap from the system.
+
+
+
+Write a playbook remove_user.yml to remove the admin account created earlier.
+
+Remember, your playbook must be placed inside /home/thor/playbooks and use inventory file there.
+
+solution:
+---
+- hosts: all
+  gather_facts: no
+  tasks:
+    - user:
+        name: 'admin'
+        state: absent
+    - group:
+        name: 'admin'
+        state: absent
+
